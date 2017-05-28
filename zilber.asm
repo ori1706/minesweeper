@@ -6,26 +6,39 @@ DATASEG
 row_amount equ 7
 column_amount equ 7
 area equ row_amount*column_amount
-
+zeroarray db 8 dup (0)
 board_arr db area dup (0) ; 0=empty 1=bomb
+justAnarray db 7 dup (14h)
 present_board_array db area dup (0) ;numbers show how many bombs around point 
-topresentarray db area dup (0) ; 0=unseen 1=bomb 2=flag 3=seen
+topresentarray db area dup (0) ; 0=unseen 1=seen 2=flag 
 how_many_bombs_input db 3,0,0,0,0
-bombs_amount db ?
+lose db 0
+win db 0
+bombs_amount db 0
 how_many_bombs_msg db 'how many bombs do you want to place?', 10 , '$'
 too_many_bombs_msg db 'you chose to place to many bombs', 10, 'try again', 10 , '$'
-choose_action_msg db 'what do u want to do here? (f to flag or e to explode)$'
+choose_action_msg db 'what do u want to do here? (f to flag ,e to explode and a to choose another piece)$'
 wrong_input_msg db 'you have entered wrong imput please try again$'
 already_seen_msg db 'this sqaure is laready seen you can not ineract with this piece, choose again$'
 already_flagged_msg db 'you already flagged this piece, do you want to unflag it?(y for yes and n for no)$'
-open_piece_msg db 'you can not explode an open piece, try again$'
+open_piece_msg db 'you can not choose an open piece, try again$'
 explode_flagged_msg db 'this piece is flgged and you can not blow it up, try again$'
+try_again_msg db 'try again$'
+you_won_msg db 'you won the game, congrats!$'
+you_lost_msg db 'you lost the game...$'
+another_game_msg db 'do you want to play another game?$'
+have_a_nice_day_msg db 'Have a nice day :)$'
+lineFeed db 13, 10, '$'
+succecfulMoves db ,0
+bombsFlagged db 0
+space db ' $'
 bomb_sign db 'B$'
 empty_sign db 'E$'
+flagSign db 'F$'
 
 CODESEG
 ;this procedure allows the user to choose using the keyboard a position on the board
-;input: offset of board
+;input: offset of the array to present and the offset of the array that holds the amount of bombs near each piece
 ;output: offset of the chosen place
 proc Choose_Place
 	push bp
@@ -37,11 +50,13 @@ proc Choose_Place
 	push si
 	push di
 	
-	mov si, [bp+4] ;the board offset
+	mov si, [bp+4] ;the board to present offset
 	mov di, [bp+4] ;the looked at position
-present:
-	;push si
-	;call Present_Board
+present2:
+	;push [bp+8]
+	push si
+	push [bp+6] ;amount of bombs near each piece
+	call Present_Board
 	
 	mov ax, di
 	sub ax, si
@@ -59,11 +74,12 @@ present:
 	mov ah, 2
 	int 10h ;moves the cursor, dh y axis, dl x axis
 	mov bx, 10
-	mov cx, 1
+	mov cx, 2
 	mov ah, 9
 	int 10h ;changes the next two digits to light green
 	mov ah, 2
 	mov dl, 219
+	int 21h
 	int 21h
 	
 	
@@ -95,25 +111,25 @@ MoveRight:
 	cmp bh, ROW_AMOUNT-1
 	je waitForData
 	inc di
-	jmp present
+	jmp present2
 MoveLeft:
 	cmp bh, 0
 	je waitForData
 	dec di
-	jmp present
+	jmp present2
 MoveUp:
 	cmp bl, 0
 	je waitForData
 	sub di, ROW_AMOUNT
-	jmp present
+	jmp present2
 MoveDown:
 	cmp bl, ROW_AMOUNT-1
 	je waitForData
 	add di, ROW_AMOUNT
-	jmp present
+	jmp present2
 	
 chosen:
-	mov [bp+6], di
+	mov [bp+8], di
 	pop di
 	pop si
 	pop dx
@@ -121,7 +137,7 @@ chosen:
 	pop bx
 	pop ax
 	pop bp
-	ret 2
+	ret 4
 endp Choose_Place
 ;input: selected piece
 proc int_with_piece
@@ -133,10 +149,14 @@ proc int_with_piece
 	push dx
 	push di
 	push si
-
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
 	mov si, [bp+4] ; si holds the chosen piece
-	cmp [si], 1
-	je alreadySeenMsg
+	cmp [byte ptr si], 1 ;chekcs if the chosen piece is already seen
+	je seen
+choose_action_input:
 	mov dx, offset choose_action_msg
 	mov ah, 9
 	int 21h
@@ -146,13 +166,18 @@ proc int_with_piece
 	je flag1
 	cmp al, 'e'
 	je explode
+	cmp al, 'a'
+	je exitProc
 wrong_input:
 	mov dx, offset wrong_input_msg
 	mov ah, 9
 	int 21h
-	jmp exitProc
+	mov dx, offset try_again_msg
+	mov ah, 9
+	int 21h
+	jmp choose_action_input
 flag1:
-	cmp [si], 2
+	cmp [byte ptr si], 2
 	jne n1
 	mov dx, offset already_flagged_msg
 	mov ah, 9
@@ -163,18 +188,17 @@ flag1:
 	je exitProc
 	cmp al, 'y'
 	jne wrong_input
-	mov [si], 0
+	mov [byte ptr si], 0
+	jmp exitProc
 n1:
-	cmp [si], 1
-	je pieceSeen
-	mov [si], 2	
+	mov [byte ptr si], 2	
 	jmp exitProc
 explode:
-	cmp [si], 2
+	cmp [byte ptr si], 2
 	je flag2
-	cmp [si], 0
+	cmp [byte ptr si], 0
 	jne seen
-	mov [si], 1
+	mov [byte ptr si], 1
 	jmp exitProc
 flag2:
 	mov dx, offset explode_flagged_msg
@@ -196,7 +220,8 @@ pop ax
 pop bp
 ret 2
 endp int_with_piece
-
+;input: the arrau that holds how many bombs surrounf each unit and the array to present_board and the board
+;output: non
 proc present_board
 	push bp
 	mov bp, sp
@@ -207,38 +232,82 @@ proc present_board
 	push di
 	push si
 
-	mov di, [bp+4] ; present (what is there)
+	call clear_board
+	mov di, [bp+4] ; present (what is there, the maount of bobms...)
 	mov si, [bp+6] ; topresent what will the array present (seen flag or unseen)
+	;[bp+8] is the board
 	xor ax, ax
 	xor bx, bx
-	mov cx, area
-present:
+	mov dl, 1
+	mov dh, 2
+	mov ah, 2
+	int 10h
+	mov cx, column_amount
+present1:
+	push cx
+	mov cx, row_amount
+present3:
+
 	cmp [byte ptr si+bx], 0 ; 0=unseen
 	jne check
 	call print_square
+	jmp loopEnd
+;bombreveled:
+	;mov [byte ptr lose], 1
+	;pop si
+	;jmp loopEnd
 check:
-	cmp [byte ptr si+bx],1 ; 1 = seen
+	cmp [byte ptr si+bx], 1 ; 1 = seen
 	jne flag
-	mov dl, [bytr ptr di+bx]
+	;push si
+	;mov si, [bp+8]
+	;cmp [byte ptr si+bx], 1
+	;je bombreveled
+	;pop si
+	mov dl, [byte ptr di+bx]
+	cmp dl, 10
+	je b
 	add dl, '0'
 	mov ah, 2
 	int 21h
+	mov dx, offset space
+	mov ah, 9
+	int 21h
+	jmp loopEnd
+b:
+	mov dl, 'B'
+	mov ah, 2
+	int 21h
+	mov dx, offset space
+	mov ah, 9
+	int 21h
 	jmp loopEnd
 flag:
-	mov dl, 'F'
-	mov ah,2 
+	mov dx, offset flagSign
+	mov ah, 9
+	int 21h
+	mov dx, offset space
+	mov ah, 9
 	int 21h
 loopEnd:
 	inc bx
-	loop present
+	loop present3
 
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h 
+	mov dx, offset space
+	mov ah, 9
+	int 21h
+	pop cx
+	loop present1
 
 	pop si
 	pop di
 	pop dx
 	pop cx
 	pop bx
-	pop adx
+	pop ax
 	pop bp
 
 	ret 4
@@ -254,10 +323,11 @@ proc print_square
 	push ax
 	push dx
 	push cx
+	mov cx, 7
 	mov ah, 2
 	mov dl, 219
 	int 21h
-	;int 21h
+	int 21h
 	pop cx
 	pop dx
 	pop ax
@@ -339,8 +409,8 @@ push dx
 push di
 push si
 
-	mov bx, [bp+4] ;topresentarray
-	mov di, [bp+6] ;board_arr
+	mov di, [bp+4] ;board_arr
+	mov bx, [bp+6] ;present array
 	xor ax, ax
 	xor si, si
 	mov cx, area
@@ -349,14 +419,15 @@ countLoop:
 	mov bx, si
 	cmp [byte ptr di+bx], 1
 	je bomb
-	cmp al, 7
+	cmp al, row_amount-1 ; cheks if right corner
 	je rightedge
 	cmp al, 0
 	je leftEdge
 	cmp [byte ptr di+bx+row_amount], 1
 	jne a1
 	inc dx
-a1:						
+a1:							
+
 	cmp [byte ptr di+bx+(row_amount+1)], 1
 	jne a2
 	inc dx
@@ -387,8 +458,7 @@ a7:
 	jmp setPiece
 
 rightEdge:
-	;push bx
-	;mov bx, si
+	
 	cmp si, row_amount-1
 	je rightTopCorner
 	cmp si, area
@@ -402,23 +472,22 @@ c1:
 	inc dx
 c2:
 	add di, si
-	cmp [byte ptr di-1], 1
+	cmp [byte ptr di+bx-1], 1
 	jne c3
 	inc dx
 c3:
 	add di, si
-	cmp [byte ptr di+row_amount], 1
+	cmp [byte ptr di+bx+row_amount], 1
 	jne c4
 	inc dx
 c4:
+xor ax, ax
 	cmp [byte ptr di+bx+(row_amount-1)], 1
 	jne setPiece
 	inc dx
 	jmp setPiece
 
 leftEdge:
-	push bx
-	mov bx, si
 	cmp si, 0
 	je leftTopEdge
 	cmp si, area-row_amount
@@ -460,7 +529,6 @@ d4:
 	inc dx
 	jmp setPiece
 rightBotoomCorner:
-	push bx
 	mov bx, si
 	cmp [byte ptr di+bx-row_amount], 1
 	jne g1
@@ -476,7 +544,6 @@ g2:
 	jmp setPiece
 
 leftTopEdge:
-	push bx
 	mov bx, si
 	cmp [byte ptr di+bx+1], 1
 	jne e3
@@ -491,7 +558,6 @@ e4:
 	inc dx
 	jmp setPiece
 leftBottomCorner:
-	push bx
 	mov bx, si
 	cmp [byte ptr di+bx-row_amount], 1
 	jne f1
@@ -514,6 +580,7 @@ setPiece:
 	mov [byte ptr bx+si], dl ; dl contains how much bombs are around the piece
 endLoop2:
 	inc si
+	inc al
 	xor dx, dx
 	loop countLoop
 
@@ -531,16 +598,195 @@ pop bp
 ret 4
 endp set_present_board
 
+
+	proc manage_game2
+	push bp
+	mov bp, sp
+	push ax
+	push bx
+	push cx
+	push dx
+	push si
+	push di
+
+	mov di, [bp+4]
+	mov si, [bp+6]
+	;[bp+4] - board array - di
+	;[bp+6] topresentarray - si
+	;[bp+8] present array
+	push di
+	call set_bombs
+	push [bp+8]
+	push di
+	call set_present_board
+
+	mov cl, 0FFh
+gamePlay:
+	
+	push di
+	push [bp+8]
+	push si
+	call Choose_Place
+	call int_with_piece
+	push si
+	push di
+	call check_game
+	pop ax
+	cmp ax, 1
+	je loss
+	cmp ax, 2
+	je wonGame
+	jmp gamePlay
+	;xor bx, bx
+	;mov cx, area
+;check_loss:
+	;cmp [byte ptr di+bx], 1
+	;jne loopEn
+	;cmp [byte ptr si+bx], 1
+	;jne notSeen
+	;mov [lose], 1
+	;mov cx, 1
+	;jmp loopEn
+;notSeen:
+	;cmp [byte ptr si+bx], 10
+	;jne loopEn
+	;inc dx
+;Check_if_won:
+	;cmp dl, [ byte ptr bombs_amount]
+	;jne loopEn
+	;mov [win], 1
+	;jmp loopEn
+;loopEn:
+	;inc bx
+	;loop check_loss
+
+	;cmp [lose], 1
+	;jne maybeWon
+	;jmp lost_or_won
+loss:
+	mov dx, offset you_lost_msg
+	mov ah,9 
+	int 21h
+	jmp endProc
+wonGame:
+	mov dx, offset you_won_msg
+	mov ah, 9
+	int 21h
+endProc:
+	ret 8
+	endp manage_game2
+
+proc check_game
+	push bp
+	mov bp, sp
+	mov si, [bp+6]
+	mov di, [bp+4]
+	;[bp+4] board_arr - di
+	;[bp+6] topresentarray - si
+check_loss:
+	cmp [byte ptr di+bx], 1
+	jne loopEn
+	cmp [byte ptr si+bx], 1
+	jne notSeen
+	mov [lose], 1
+	jmp loopEn
+notSeen:
+	cmp [byte ptr si+bx], 10
+	jne loopEn
+	inc dx
+Check_if_won:
+	cmp dl, [ byte ptr bombs_amount]
+	jne loopEn
+	mov [win], 1
+loopEn:
+	inc bx
+	loop check_loss
+
+	cmp [lose], 1
+	je lostGame
+	cmp [win], 1
+	je gamewon
+	jmp notWonOrLost
+lostGame:
+	mov [byte ptr bp+6], 1
+gameWon:
+	mov [ byte ptr bp+6], 2
+notWonOrLost:
+	mov [byte ptr bp+6], 0
+	ret 4
+endp check_game
 start:
 	mov ax, @data
 	mov ds, ax
-	;push offset justANum
+	jmp fckoff
+	mov cx, 1
+playing:
+	push offset present_board_array
+	push offset topresentarray
 	push offset board_arr
+	call manage_game2
+askAnotherGame:
+	mov dx, offset another_game_msg
+	mov ah,9 
+	int 21h
+	mov ah, 07h ;input is in al
+	int 21h
+	cmp al, 'y'
+	jne notYes
+	jmp playing
+notYes:
+	cmp al, 'n'
+	jne notNo
+	jmp endGame
+notNo:
+	mov dx, offset wrong_input_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	int 21h
+endGame:
+	mov dx, offset have_a_nice_day_msg
+	mov ah, 9
+	int 21h
+
+
+	;push offset justANum
+	;push offset board_arr
 	;push offset random_locations
+	;call set_bombs
+	;push offset present_board_array
+	;push offset board_arr
+	;call set_present_board
+	;mov cx, 1000
+fckoff:	
+	push offset board_arr
 	call set_bombs
 	push offset present_board_array
 	push offset board_arr
 	call set_present_board
+	mov cx, 1
+fcking_play:
+
+	
+	;push offset present_board_array
+	;push offset topresentarray
+	;call manage_game
+	;push [bp+4] ; offset of the board arr
+	;push [bp+6] ; offset of what to present (topresentarray)
+	;push [bp+8] ; offset of the array that holds the amount of bombs that surround a piece
+	push offset board_arr
+	push offset present_board_array
+	push offset topresentarray
+	
+	call Choose_Place
+	call int_with_piece
+	inc cx
+	loop fcking_play
+	;push offset topresentarray
+	;push offset present_board_array
+	;call present_board
+
+
 
 exit:
 mov ax, 4c00h
@@ -552,3 +798,4 @@ END start
 ;int 21 - little text and files
 ;int 16 more text
 ;int 10 graphics
+;note to self: left edge counting is wrong
