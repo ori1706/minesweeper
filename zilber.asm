@@ -70,7 +70,7 @@ present2:
 	xchg dh, dl ;now, dh stores the y axis (row), dl stores the x axis (column)
 	add dh, 2 ;go down two rows
 	add dl, dl ;we are using two digits for each place, so we have to the double the visual movement
-	inc dl ;go rigth one column
+	inc dl ;go right one column
 	xor bx, bx
 	mov ah, 2
 	int 10h ;moves the cursor, dh y axis, dl x axis
@@ -275,11 +275,11 @@ check:
 	;pop si
 
 	mov dl, [byte ptr di+bx]
-	cmp dl, 10
+	cmp dl, 10 ; checks if ther piece is a bomb
 	je b
 	;cmp dl, 11
 	;je removed
-	add dl, '0'
+	add dl, '0' ;if it is seen and not a bomb or a flag it means it has a, this action turns it from ascii to the number itself 
 	mov ah, 2
 	int 21h
 	mov dx, offset space
@@ -466,7 +466,7 @@ push si
 	xor ax, ax
 	xor si, si
 	mov cx, area
-countLoop:
+countLoop:     ;there are algorithms here i can't explain typing  
 	push bx
 	mov bx, si
 	cmp [byte ptr di+bx], 1
@@ -523,12 +523,12 @@ c1:
 	jne c2
 	inc dx
 c2:
-	add di, si
+	;add di, si
 	cmp [byte ptr di+bx-1], 1
 	jne c3
 	inc dx
 c3:
-	add di, si
+	;add di, si
 	cmp [byte ptr di+bx+row_amount], 1
 	jne c4
 	inc dx
@@ -667,43 +667,32 @@ proc check_game
 	;[bp+6] topresentarray - si
 	mov cx, area
 check_loss:
-	cmp [byte ptr di+bx], 1
-	jne loopEn
-	cmp [byte ptr si+bx], 1
+	cmp [byte ptr di+bx], 1 ;checks if the checked location in the board arr is a bomb
+	jne loopEn ;if not continue
+	cmp [byte ptr si+bx], 1 ; if the it was a bomb, this checks if the bomb was seen in the topresentarray (means the player lost the game)
 	jne notSeen
 	mov [byte ptr game_status], 1
 	mov cx, 1
 	jmp loopEn
 notSeen:
-	cmp [byte ptr si+bx], 2
-	jne loopEn
+	cmp [byte ptr si+bx], 2 ;if the chcked unit in the board arr was a bomb, and in the topresent array it was not seen it may be a flag
+	jne loopEn ;if its not  flag then continue, but if it is add it to the flagged bombs counter
 	mov cx, 1
 	inc dx
 Check_if_won:
-	cmp dl, [byte ptr bombs_amount]
+	cmp dl, [byte ptr bombs_amount] ;once the flagged bombs counter (dl) reaches the bombs amount the player won the game (if he didn't lose up to there)
 	jne loopEn
 	mov [byte ptr game_status], 2
 loopEn:
 	inc bx
 	loop check_loss
 
-	;cmp [lose], 1
-	;je lostGame
-	;cmp [win], 1
-	;je gamewon
-	;jmp notWonOrLost
-;lostGame:
-	;mov [byte ptr bp+6], 1
-;gameWon:
-	;mov [ byte ptr bp+6], 2
-;notWonOrLost:
-	;mov [byte ptr bp+6], 0
 	pop dx
 	pop bx
 	pop di
 	pop si
 	pop bp 
-	ret 4 ;2
+	ret 4 
 endp check_game
 
 
@@ -712,19 +701,7 @@ start:
 	mov ax, @data
 	mov ds, ax
 	xor bx, bx
-	jmp fckoff
-	mov cx, 1
 
-
-	;push offset justANum
-	;push offset board_arr
-	;push offset random_locations
-	;call set_bombs
-	;push offset present_board_array
-	;push offset board_arr
-	;call set_present_board
-	;mov cx, 1000
-fckoff:	
 	mov cx, area
 resetboard:
 	mov [byte ptr board_arr+bx], 0
@@ -743,15 +720,8 @@ resetboard:
 	call set_present_board
 
 	mov cx, 1
-fcking_play:
-	
-	
-	;push offset present_board_array
-	;push offset topresentarray
-	;call manage_game
-	;push [bp+4] ; offset of the board arr
-	;push [bp+6] ; offset of what to present (topresentarray)
-	;push [bp+8] ; offset of the array that holds the amount of bombs that surround a piece
+gamePlay:
+
 	push offset board_arr
 	push offset present_board_array
 	push offset topresentarray
@@ -767,21 +737,18 @@ fcking_play:
 	cmp [byte ptr game_status], 2
 	je gameOver
 	cmp [byte ptr game_status], 0
-	je fcking_play
-	;pop ax
-	;cmp ax, 1
-	;jne keepChecking
-	;mov [lose], 1
-	;dec cx
-;keepChecking:
-	;cmp ax, 2
-	;jne loop1
-	;mov [win], 1
-	;dec cx
+	je gamePlay
 gameOver:
 
 	cmp [byte ptr game_status], 1
 	je youLost
+	push offset topresentarray
+	push offset present_board_array
+	call present_board
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
 	mov dx, offset lineFeed
 	mov ah, 9
 	int 21h
@@ -794,6 +761,13 @@ gameOver:
 	inc [byte ptr win_counter]
 	jmp toExit
 youLost:
+	push offset topresentarray
+	push offset present_board_array
+	call present_board
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
 	mov dx, offset lineFeed
 	mov ah, 9
 	int 21h
@@ -847,9 +821,7 @@ toExit:
 	int 21h
 	jmp toExit
 
-	;push offset topresentarray
-	;push offset present_board_array
-	;call present_board
+
 
 exiting:
 	mov dx, offset lineFeed
