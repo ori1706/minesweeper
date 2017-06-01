@@ -9,7 +9,6 @@ area equ row_amount*column_amount
 zeroarray db 20 dup (0)
 board_arr db area dup (0) ; 0=empty 10=bomb
 justAnarray db 15 dup (14h)
-;present_board_array db area dup (0) ;numbers show how many bombs around point 
 topresentarray db area dup (0) ; 0=unseen 1=seen 2=flag 
 how_many_bombs_input db 3,0,0,0,0
 game_status db, 0
