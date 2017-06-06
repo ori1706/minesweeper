@@ -15,6 +15,13 @@ game_status db, 0
 bombs_amount db 0
 win_counter db 0
 loss_counter db 0
+action_chose db 0
+arrow db '---> $'
+expose_piece db 'expose piece$'
+flag_piece db ' flag piece$'
+choose_another db ' choose another piece$'
+spaces db '     $'
+instructions_msg db 'fisrt you will choose a place to start and all the pieces around it will be       empty from bombs$'
 how_many_bombs_msg db 'how many bombs do you want to place? (the units around it will be empty)', 10 , '$'
 too_many_bombs_msg db 'you chose to place to many bombs', 10, 'try again', 10 , '$'
 choose_action_msg db 'what do u want to do here? (f to flag ,e to explode and a to choose another     piece)$'
@@ -140,6 +147,167 @@ chosen:
 	pop bp
 	ret 4
 endp Choose_Place
+proc int_with_piece2
+	push bp
+	mov bp, sp
+	push ax
+	push dx
+	push si
+	push di
+	mov [byte ptr action_chose], 0
+	mov si, [bp+8] ;chosen piece
+	mov di, [bp+6]
+	cmp [byte ptr si], 1 ;chekcs if the chosen piece is already seen
+	je not_available
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
+	keyEnter equ 01Ch
+	down equ 050h
+	up equ 048h
+presentAction:
+	push di ;topresentarray
+	push [bp+4] ;board arr
+	call Present_Board
+	cmp [byte ptr action_chose], 0
+	jne maybeFlag
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp exposeMarked
+maybeFlag:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+exposeMarked:
+	mov dx, offset expose_piece
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp [byte ptr action_chose], 1
+	jne maybeAnother
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp flagMarked
+maybeAnother:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+flagMarked:
+	mov dx, offset flag_piece
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp [byte ptr action_chose], 2
+	jne not_another
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp anotherMarked
+not_another:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+anotherMarked:
+	mov dx, offset choose_another
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+get_action:
+	mov ah, 0
+	int 16h
+	cmp ah, up
+	je actionUp
+	cmp ah, down
+	je actiondown
+	cmp ah, keyEnter
+	je enterPressed
+	jmp get_action
+actionUp:
+	cmp [byte ptr action_chose], 0
+	jne goup
+	mov [byte ptr action_chose], 2
+	jmp presentAction
+goup:
+	dec [byte ptr action_chose]
+	jmp presentAction
+actiondown:
+	cmp [byte ptr action_chose], 2
+	jne godown
+	mov [byte ptr action_chose], 0
+	jmp presentAction
+godown:
+	inc [byte ptr action_chose]
+	jmp presentAction
+enterPressed:
+	mov al, [byte ptr action_chose]
+	;jmp intercat1
+	cmp al, 1
+	je flag4
+	cmp al, 0
+	je explode2
+	cmp al, 2
+	je piece_changed
+wrong_input2:
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	mov dx, offset wrong_input_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	jmp choose_action_input
+flag4:
+	cmp [byte ptr si], 2
+	jne n12
+	mov dx, offset already_flagged_msg
+	mov ah, 9
+	int 21h
+	mov ah, 07h
+	int 21h
+	cmp al, 'n'
+	je piece_changed
+	cmp al, 'y'
+	jne wrong_input2
+	mov [byte ptr si], 0
+	jmp piece_changed
+n12:
+	mov [byte ptr si], 2	
+	jmp piece_changed
+explode2:
+	cmp [byte ptr si], 2
+	je flag3
+	;cmp [byte ptr si], 0
+	;jne seen
+	mov [byte ptr si], 1
+	jmp piece_changed
+flag3:
+	mov dx, offset explode_flagged_msg
+	mov ah, 9
+	int 21h
+	jmp piece_changed
+not_available:
+	mov dx, offset already_seen_msg
+	mov ah, 9
+	int 21h
+piece_changed:
+	pop di
+	pop si
+	pop dx
+	pop ax
+	pop bp
+ret 6
+endp int_with_piece2
 ;input: selected piece
 ;output: changes values of the location sent to it
 ;purpose: to interact with the piece chosen by the player
@@ -675,7 +843,9 @@ gamePlay:
 	push offset board_arr
 	push offset topresentarray
 	call Choose_Place
-	call int_with_piece
+	push offset topresentarray
+	push offset board_arr
+	call int_with_piece2
 	
 	push offset topresentarray
 	push offset board_arr
