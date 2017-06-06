@@ -18,16 +18,19 @@ loss_counter db 0
 action_chose db 0
 arrow db '---> $'
 expose_piece db 'expose piece$'
-flag_piece db ' flag piece$'
-choose_another db ' choose another piece$'
+flag_piece db 'flag piece$'
+choose_another db 'choose another piece$'
 spaces db '     $'
+yesorno db 0
+yes db 'Yes$'
+no db 'No$'
 instructions_msg db 'fisrt you will choose a place to start and all the pieces around it will be       empty from bombs$'
 how_many_bombs_msg db 'how many bombs do you want to place? (the units around it will be empty)', 10 , '$'
 too_many_bombs_msg db 'you chose to place to many bombs', 10, 'try again', 10 , '$'
-choose_action_msg db 'what do u want to do here? (f to flag ,e to explode and a to choose another     piece)$'
+choose_action_msg db 'what do u want to do here?$'
 wrong_input_msg db 'you have entered wrong imput please try again$'
 already_seen_msg db 'this sqaure is laready seen you can not ineract with this piece, choose again$'
-already_flagged_msg db 'you already flagged this piece, do you want to unflag it?(y for yes and n for no)$'
+already_flagged_msg db 'you already flagged this piece, do you want to unflag it?$'
 open_piece_msg db 'you can not choose an open piece, try again$'
 explode_flagged_msg db 'this piece is flgged and you can not blow it up, try again$'
 try_again_msg db 'try again$'
@@ -147,7 +150,10 @@ chosen:
 	pop bp
 	ret 4
 endp Choose_Place
-proc int_with_piece2
+;input: board array, topresentarray and the chosen piece_changed
+;output: changes (or not) the chosen piece's value
+;purpose:to ineract with the chosen piece
+proc int_with_piece
 	push bp
 	mov bp, sp
 	push ax
@@ -156,7 +162,7 @@ proc int_with_piece2
 	push di
 	mov [byte ptr action_chose], 0
 	mov si, [bp+8] ;chosen piece
-	mov di, [bp+6]
+	mov di, [bp+6] ;topresentarray
 	cmp [byte ptr si], 1 ;chekcs if the chosen piece is already seen
 	je not_available
 	mov dl, 1
@@ -170,6 +176,12 @@ presentAction:
 	push di ;topresentarray
 	push [bp+4] ;board arr
 	call Present_Board
+	mov dx, offset choose_action_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
 	cmp [byte ptr action_chose], 0
 	jne maybeFlag
 	mov dx, offset arrow
@@ -266,18 +278,87 @@ wrong_input2:
 	mov dx, offset lineFeed
 	mov ah, 9
 	int 21h
-	jmp choose_action_input
+	jmp get_action
 flag4:
 	cmp [byte ptr si], 2
 	jne n12
+presentYesOrNno:
+	push di ;topresentarray
+	push [bp+4] ;board arr
+	call Present_Board
 	mov dx, offset already_flagged_msg
 	mov ah, 9
 	int 21h
-	mov ah, 07h
+	mov dx, offset lineFeed
+	mov ah, 9
 	int 21h
-	cmp al, 'n'
+isitYes:
+	cmp [byte ptr yesorno], 0
+	jne notUp
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp isItDown
+notUp:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+isItDown:
+	mov dx, offset Yes
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp [byte ptr yesorno], 1
+	jne notDown
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp itwasyes
+notDown:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+itwasyes:
+	mov dx, offset no
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+
+	mov ah, 0
+	int 16h
+	cmp ah, up
+	je upItIs
+	cmp ah, down
+	je downItIs
+	cmp ah, keyEnter
+	je pressedEnter
+	jmp presentYesOrNno
+
+upItIs:
+	cmp [byte ptr yesorno], 0
+	jne justUp
+	mov [byte ptr yesorno], 1
+	jmp presentYesOrNno
+justUp:
+	dec [byte ptr yesorno]
+	jmp presentYesOrNno
+downItIs:
+	cmp [byte ptr yesorno], 1
+	jne justDown
+	mov [byte ptr yesorno], 0
+	jmp presentYesOrNno
+justDown:
+	inc [byte ptr yesorno]
+	jmp presentYesOrNno
+pressedEnter:
+	mov al, [byte ptr yesorno]
+	cmp al, 1
 	je piece_changed
-	cmp al, 'y'
+	cmp al, 0
 	jne wrong_input2
 	mov [byte ptr si], 0
 	jmp piece_changed
@@ -307,93 +388,9 @@ piece_changed:
 	pop ax
 	pop bp
 ret 6
-endp int_with_piece2
-;input: selected piece
-;output: changes values of the location sent to it
-;purpose: to interact with the piece chosen by the player
-proc int_with_piece
-	push bp
-	mov bp, sp
-	push ax
-	push bx
-	push cx
-	push dx
-	push di
-	push si
-	mov dl, 1
-	mov dh, column_amount+2
-	mov ah, 2
-	int 10h
-	mov si, [bp+4] ; si holds the chosen piece
-	cmp [byte ptr si], 1 ;chekcs if the chosen piece is already seen
-	je seen
-choose_action_input:
-	mov dx, offset choose_action_msg
-	mov ah, 9
-	int 21h
-	mov ah, 07h ;input is in al
-	int 21h
-	cmp al, 'f'
-	je flag1
-	cmp al, 'e'
-	je explode
-	cmp al, 'a'
-	je exitProc
-wrong_input:
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov dx, offset wrong_input_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	jmp choose_action_input
-flag1:
-	cmp [byte ptr si], 2
-	jne n1
-	mov dx, offset already_flagged_msg
-	mov ah, 9
-	int 21h
-	mov ah, 07h
-	int 21h
-	cmp al, 'n'
-	je exitProc
-	cmp al, 'y'
-	jne wrong_input
-	mov [byte ptr si], 0
-	jmp exitProc
-n1:
-	mov [byte ptr si], 2	
-	jmp exitProc
-explode:
-	cmp [byte ptr si], 2
-	je flag2
-	cmp [byte ptr si], 0
-	jne seen
-	mov [byte ptr si], 1
-	jmp exitProc
-flag2:
-	mov dx, offset explode_flagged_msg
-	mov ah, 9
-	int 21h
-	jmp exitProc
-seen:
-	mov dx, offset open_piece_msg
-	mov ah, 9
-	int 21h
-exitProc:
-	
-pop si
-pop di
-pop dx
-pop cx
-pop bx
-pop ax
-pop bp
-ret 2
 endp int_with_piece
+
+
 ;input: board arr and topresentarray
 ;output: non (it shows the board)
 ;purpose: shows the unit's value if the unit is visible, if it's flagged a flag and if it's not visible a square
@@ -845,7 +842,7 @@ gamePlay:
 	call Choose_Place
 	push offset topresentarray
 	push offset board_arr
-	call int_with_piece2
+	call int_with_piece
 	
 	push offset topresentarray
 	push offset board_arr
