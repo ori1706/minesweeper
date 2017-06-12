@@ -17,26 +17,26 @@ win_counter db 0
 loss_counter db 0
 action_chose db 0
 arrow db '---> $'
-expose_piece db 'expose piece$'
-flag_piece db 'flag piece$'
-choose_another db 'choose another piece$'
+expose_piece db 'Expose piece$'
+flag_piece db 'Flag piece$'
+choose_another db 'Choose another piece$'
 spaces db '     $'
 yesorno db 0
 yes db 'Yes$'
 no db 'No$'
-instructions_msg db 'fisrt you will choose a place to start and all the pieces around it will be       empty from bombs$'
-how_many_bombs_msg db 'how many bombs do you want to place? (the units around it will be empty)', 10 , '$'
-too_many_bombs_msg db 'you chose to place to many bombs', 10, 'try again', 10 , '$'
-choose_action_msg db 'what do u want to do here?$'
-wrong_input_msg db 'you have entered wrong imput please try again$'
-already_seen_msg db 'this sqaure is laready seen you can not ineract with this piece, choose again$'
-already_flagged_msg db 'you already flagged this piece, do you want to unflag it?$'
-open_piece_msg db 'you can not choose an open piece, try again$'
-explode_flagged_msg db 'this piece is flgged and you can not blow it up, try again$'
-try_again_msg db 'try again$'
-you_won_msg db 'you won the game, congrats!$'
-you_lost_msg db 'you lost the game...$'
-another_game_msg db 'do you want to play another game? (y for yes and n for no)$'
+instructions_msg db 'Fisrt you will choose a place to start and all the pieces around it will be', 10, 'empty from bombs', 10, 'Press any key to continue$'
+how_many_bombs_msg db 'How many bombs do you want to place? (the units around it will be empty)', 10 , '$'
+too_many_bombs_msg db 'You chose to place to many bombs', 10, 'try again', 10 , '$'
+choose_action_msg db 'What do u want to do here?$'
+wrong_input_msg db 'You have entered wrong imput please try again$'
+already_seen_msg db 'This sqaure is laready seen you can not ineract with this piece, choose again$'
+already_flagged_msg db 'You already flagged this piece, do you want to unflag it?$'
+open_piece_msg db 'You can not choose an open piece, try again$'
+explode_flagged_msg db 'This piece is flgged and you can not blow it up, try again$'
+try_again_msg db 'Try again$'
+you_won_msg db 'You won the game, congrats!$'
+you_lost_msg db 'You lost the game...', 10, 'Do you want to play another game?$'
+another_game_msg db 'Do you want to play another game?$'
 have_a_nice_day_msg db 'Have a nice day :)$'
 win_counter_msg db 'you won: $'
 loss_counter_msg db 'you lost: $'
@@ -150,6 +150,180 @@ chosen:
 	pop bp
 	ret 4
 endp Choose_Place
+;input: topresentarray and the board array
+;output: the chosen answer (0 for yes and 1 for no) through al
+;purpose: interface with the user
+proc yesornoquestion
+	push bp
+	mov bp, sp
+	push dx
+	push di
+	push si
+	mov di, [bp+6]
+	
+	mov [byte ptr yesorno], 0
+	mov si, 0 ; si is used to make sure that not every movment changes the win and lose counters
+	presentYesOrNno:
+	push di ;topresentarray
+	push [bp+4] ;board arr
+	call Present_Board
+	cmp [byte ptr game_status],0 
+	je itsflagged
+	cmp [byte ptr game_status], 1
+	je youLost
+	push offset topresentarray
+	push offset board_arr
+	call present_board
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	mov dx, offset you_won_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp si, 0
+	jne toExit
+	inc [byte ptr win_counter]
+	inc si
+	jmp toExit
+youLost:
+	push offset topresentarray
+	push offset board_arr
+	call present_board
+	mov dl, 1
+	mov dh, column_amount+2
+	mov ah, 2
+	int 10h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	mov dx, offset you_lost_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp si, 0
+	jne toExit
+	inc [byte ptr loss_counter]
+	inc si
+toExit:
+	mov dx, offset win_counter_msg
+	mov ah, 9
+	int 21h
+	mov dl, [byte ptr win_counter]
+	add dl, '0'
+	mov ah, 2
+	int 21h
+	mov dx, offset con_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	mov dx, offset loss_counter_msg
+	int 21h
+	mov dl, [byte ptr loss_counter]
+	add dl, '0'
+	mov ah, 2
+	int 21h
+	mov dx, offset con_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	mov dx, offset another_game_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	jmp isityes
+itsflagged:
+	mov dx, offset already_flagged_msg
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+isitYes:
+	cmp [byte ptr yesorno], 0
+	jne notUp
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp isItDown
+notUp:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+isItDown:
+	mov dx, offset Yes
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+	cmp [byte ptr yesorno], 1
+	jne notDown
+	mov dx, offset arrow
+	mov ah, 9
+	int 21h
+	jmp itwasyes
+notDown:
+	mov dx, offset spaces
+	mov ah, 9
+	int 21h
+itwasyes:
+	mov dx, offset no
+	mov ah, 9
+	int 21h
+	mov dx, offset lineFeed
+	mov ah, 9
+	int 21h
+
+	mov ah, 0
+	int 16h
+	cmp ah, up
+	je upItIs
+	cmp ah, down
+	je downItIs
+	cmp ah, keyEnter
+	je pressedEnter
+	jmp presentYesOrNno
+
+upItIs:
+	cmp [byte ptr yesorno], 0
+	jne justUp
+	mov [byte ptr yesorno], 1
+	jmp presentYesOrNno
+justUp:
+	dec [byte ptr yesorno]
+	jmp presentYesOrNno
+downItIs:
+	cmp [byte ptr yesorno], 1
+	jne justDown
+	mov [byte ptr yesorno], 0
+	jmp presentYesOrNno
+justDown:
+	inc [byte ptr yesorno]
+	jmp presentYesOrNno
+pressedEnter:
+	mov al, [byte ptr yesorno]
+
+	pop si
+	pop di
+	pop dx
+	pop bp
+	ret 4
+endp yesornoquestion
 ;input: board array, topresentarray and the chosen piece_changed
 ;output: changes (or not) the chosen piece's value
 ;purpose:to ineract with the chosen piece
@@ -282,80 +456,10 @@ wrong_input2:
 flag4:
 	cmp [byte ptr si], 2
 	jne n12
-presentYesOrNno:
-	push di ;topresentarray
-	push [bp+4] ;board arr
-	call Present_Board
-	mov dx, offset already_flagged_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-isitYes:
-	cmp [byte ptr yesorno], 0
-	jne notUp
-	mov dx, offset arrow
-	mov ah, 9
-	int 21h
-	jmp isItDown
-notUp:
-	mov dx, offset spaces
-	mov ah, 9
-	int 21h
-isItDown:
-	mov dx, offset Yes
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	cmp [byte ptr yesorno], 1
-	jne notDown
-	mov dx, offset arrow
-	mov ah, 9
-	int 21h
-	jmp itwasyes
-notDown:
-	mov dx, offset spaces
-	mov ah, 9
-	int 21h
-itwasyes:
-	mov dx, offset no
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-
-	mov ah, 0
-	int 16h
-	cmp ah, up
-	je upItIs
-	cmp ah, down
-	je downItIs
-	cmp ah, keyEnter
-	je pressedEnter
-	jmp presentYesOrNno
-
-upItIs:
-	cmp [byte ptr yesorno], 0
-	jne justUp
-	mov [byte ptr yesorno], 1
-	jmp presentYesOrNno
-justUp:
-	dec [byte ptr yesorno]
-	jmp presentYesOrNno
-downItIs:
-	cmp [byte ptr yesorno], 1
-	jne justDown
-	mov [byte ptr yesorno], 0
-	jmp presentYesOrNno
-justDown:
-	inc [byte ptr yesorno]
-	jmp presentYesOrNno
-pressedEnter:
-	mov al, [byte ptr yesorno]
+	;push offset already_flagged_msg
+	push di
+	push [bp+4]
+	call yesornoquestion
 	cmp al, 1
 	je piece_changed
 	cmp al, 0
@@ -822,6 +926,12 @@ resetboard:
 	mov [byte ptr game_status], 0
 	inc bx
 	loop resetboard
+	call clear_board
+	mov dx, offset instructions_msg
+	mov ah, 9
+	int 21h
+	mov ah, 1
+	int 21h
 	xor bx, bx
 	push 1
 	push offset topresentarray
@@ -860,86 +970,19 @@ gamePlay:
 	je gamePlay
 gameOver:
 
-	cmp [byte ptr game_status], 1
-	je youLost
+	
 	push offset topresentarray
 	push offset board_arr
-	call present_board
-	mov dl, 1
-	mov dh, column_amount+2
-	mov ah, 2
-	int 10h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov dx, offset you_won_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	inc [byte ptr win_counter]
-	jmp toExit
-youLost:
-	push offset topresentarray
-	push offset board_arr
-	call present_board
-	mov dl, 1
-	mov dh, column_amount+2
-	mov ah, 2
-	int 10h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov dx, offset you_lost_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	inc [byte ptr loss_counter]
-toExit:
-	mov dx, offset win_counter_msg
-	mov ah, 9
-	int 21h
-	mov dl, [byte ptr win_counter]
-	add dl, '0'
-	mov ah, 2
-	int 21h
-	mov dx, offset con_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov dx, offset loss_counter_msg
-	int 21h
-	mov dl, [byte ptr loss_counter]
-	add dl, '0'
-	mov ah, 2
-	int 21h
-	mov dx, offset con_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov dx, offset another_game_msg
-	mov ah, 9
-	int 21h
-	mov dx, offset lineFeed
-	mov ah, 9
-	int 21h
-	mov ah, 7
-	int 21h
-	cmp al, 'y'
+	call yesornoquestion
+	cmp al, 0
 	je start
-	cmp al, 'n'
+	cmp al, 1
 	je exiting
 	mov dx, offset wrong_input_msg
 	mov ah, 9
 	int 21h
 	jmp toExit
+scoreMsg:
 
 
 
